@@ -25,11 +25,19 @@ Benchmark.bm do |x|
       om.unlock
     end
   } }
-  x.report( "optimized synchronize:" ) { n.times { om.synchronize { nil } } }
-  x.report( "open-coded critical:" ) { n.times {
-    saved = Thread.critical
+  x.report( "brazen open-coded critical:" ) { n.times {
+    Thread.critical = true
     begin
-      Thread.critical = true
+      nil
+    ensure
+      Thread.critical = false
+    end
+  } }
+  x.report( "optimized synchronize:" ) { n.times { om.synchronize { nil } } }
+  x.report( "timid open-coded critical:" ) { n.times {
+    saved = Thread.critical
+    Thread.critical = true
+    begin
       nil
     ensure
       Thread.critical = saved
