@@ -1,6 +1,6 @@
 require 'thread'
 require 'benchmark'
-require 'optimized-locking'
+require 'optimized_locking'
 
 class Mutex
   def noop
