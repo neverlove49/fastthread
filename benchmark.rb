@@ -17,15 +17,6 @@ m = Mutex.new
 om = OptimizedMutex.new
 
 Benchmark.bm do |x|
-  x.report( "raw:" ) { n.times { nil } }
-  x.report( "open-coded noop:" ) { n.times {
-    begin
-      nil
-    ensure
-      nil
-    end
-  } }
-  x.report( "noop method:" ) { n.times { m.noop { nil } } }
   x.report( "optimized open-coded lock:" ) { n.times {
     om.lock
     begin
@@ -34,7 +25,7 @@ Benchmark.bm do |x|
       om.unlock
     end
   } }
-  x.report( "optimize synchronize:" ) { n.times { om.synchronize { nil } } }
+  x.report( "optimized synchronize:" ) { n.times { om.synchronize { nil } } }
   x.report( "open-coded critical:" ) { n.times {
     saved = Thread.critical
     begin
