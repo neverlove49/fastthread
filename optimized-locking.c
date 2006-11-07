@@ -1,12 +1,11 @@
-#
-# Optimized Ruby Mutex implementation, loosely based on thread.rb by
-# Yukihiro Matsumoto <matz@ruby-lang.org>
-#
-#  Copyright 2006  MenTaLguY <mental@rydia.net>
-#
-# This file is made available under the same terms as Ruby.
-#
-
+/*
+ * Optimized Ruby Mutex implementation, loosely based on thread.rb by
+ * Yukihiro Matsumoto <matz@ruby-lang.org>
+ *
+ *  Copyright 2006  MenTaLguY <mental@rydia.net>
+ *
+ * This file is made available under the same terms as Ruby.
+ */
 
 #include <ruby.h>
 #include <intern.h>
