@@ -571,12 +571,12 @@ rb_queue_pop(argc, argv, self)
   VALUE self;
 {
   Queue *queue;
-  VALUE should_block;
+  int should_block;
   VALUE result;
   Data_Get_Struct(self, Queue, queue);
 
   if ( argc == 0 ) {
-    should_block = Qtrue;
+    should_block = 1;
   } else if ( argc == 1 ) {
     should_block = !RTEST(argv[0]);
   } else {
