@@ -11,7 +11,7 @@
 #include <intern.h>
 #include <rubysig.h>
 
-static VALUE rb_cOptimizedMutex;
+static VALUE rb_cMutex;
 static VALUE rb_eThreadError;
 
 typedef struct _WaitEntry {
@@ -72,7 +72,7 @@ rb_mutex_alloc()
   m->last_waiting = NULL;
   m->entry_pool = NULL;
 
-  return Data_Wrap_Struct(rb_cOptimizedMutex, rb_mutex_mark, rb_mutex_free, m);
+  return Data_Wrap_Struct(rb_cMutex, rb_mutex_mark, rb_mutex_free, m);
 }
 
 static VALUE
@@ -149,22 +149,17 @@ rb_mutex_lock(self)
 }
 
 static VALUE
-rb_mutex_unlock(self)
-  VALUE self;
-{
+rb_mutex_unlock_inner(m)
   Mutex *m;
-  VALUE current;
+{
   VALUE waking;
-  Data_Get_Struct(self, Mutex, m);
-  current = rb_thread_current();
-  if (!RTEST(m->locked)) {
-    return Qnil;
-  }
-  rb_thread_critical = Qtrue;
+
   m->locked = Qfalse;
+
   waking = Qnil;
   while ( m->waiting && !RTEST(waking) ) {
     WaitEntry *e;
+
     e = m->waiting;
     m->waiting = e->next;
     if (!m->waiting) {
@@ -172,12 +167,59 @@ rb_mutex_unlock(self)
     }
     e->next = m->entry_pool;
     m->entry_pool = e;
+
     waking = rb_rescue2(rb_thread_wakeup, e->thread, return_value, Qnil, rb_eThreadError, 0);
   }
+
+  return waking;
+}
+
+static VALUE
+rb_mutex_unlock(self)
+  VALUE self;
+{
+  Mutex *m;
+  VALUE waking;
+  Data_Get_Struct(self, Mutex, m);
+
+  if (!RTEST(m->locked)) {
+    return Qnil;
+  }
+
+  rb_thread_critical = Qtrue;
+  waking = rb_mutex_unlock_inner(m);
   rb_thread_critical = Qfalse;
+
   if (RTEST(waking)) {
     rb_rescue2(rb_thread_run, waking, return_value, Qnil, rb_eThreadError, 0);
   }
+
+  return self;
+}
+
+static VALUE
+set_critical(value)
+  VALUE value;
+{
+  rb_thread_critical = value;
+  return Qnil;
+}
+
+static VALUE
+rb_mutex_exclusive_unlock(self)
+  VALUE self;
+{
+  Mutex *m;
+  Data_Get_Struct(self, Mutex, m);
+
+  if (!RTEST(m->locked)) {
+    return Qnil;
+  }
+
+  rb_thread_critical = Qtrue;
+  rb_mutex_unlock_inner(m);
+  rb_ensure(rb_yield, Qundef, set_critical, Qfalse);
+
   return self;
 }
 
@@ -194,12 +236,13 @@ Init_fastthread()
 {
   rb_require("thread");
   rb_eThreadError = rb_const_get(rb_cObject, rb_intern("ThreadError"));
-  rb_cOptimizedMutex = rb_define_class("OptimizedMutex", rb_cObject);
-  rb_define_alloc_func(rb_cOptimizedMutex, rb_mutex_alloc);
-  rb_define_method(rb_cOptimizedMutex, "locked?", rb_mutex_locked_p, 0);
-  rb_define_method(rb_cOptimizedMutex, "try_lock", rb_mutex_try_lock, 0);
-  rb_define_method(rb_cOptimizedMutex, "lock", rb_mutex_lock, 0);
-  rb_define_method(rb_cOptimizedMutex, "unlock", rb_mutex_unlock, 0);
-  rb_define_method(rb_cOptimizedMutex, "synchronize", rb_mutex_synchronize, 0);
+  rb_cMutex = rb_define_class("Mutex", rb_cObject);
+  rb_define_alloc_func(rb_cMutex, rb_mutex_alloc);
+  rb_define_method(rb_cMutex, "locked?", rb_mutex_locked_p, 0);
+  rb_define_method(rb_cMutex, "try_lock", rb_mutex_try_lock, 0);
+  rb_define_method(rb_cMutex, "lock", rb_mutex_lock, 0);
+  rb_define_method(rb_cMutex, "unlock", rb_mutex_unlock, 0);
+  rb_define_method(rb_cMutex, "exclusive_unlock", rb_mutex_exclusive_unlock, 0);
+  rb_define_method(rb_cMutex, "synchronize", rb_mutex_synchronize, 0);
 }
 
