@@ -156,7 +156,7 @@ static VALUE
 wake_all(list)
   List *list;
 {
-  while ( list->entries ) {
+  while (list->entries) {
     wake_one(list);
   }
   return Qnil;
