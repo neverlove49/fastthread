@@ -400,7 +400,7 @@ wait_condvar(condvar, mutex)
     return;
   }
   mutex->owner = Qnil;
-  put_list(&mutex->waiting, rb_thread_current());
+  put_list(&condvar->waiting, rb_thread_current());
   rb_thread_stop();
 
   lock_mutex(mutex);
