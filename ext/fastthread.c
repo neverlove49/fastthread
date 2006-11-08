@@ -12,34 +12,42 @@
 #include <rubysig.h>
 
 static VALUE rb_cMutex;
+static VALUE rb_cConditionVariable;
 static VALUE rb_eThreadError;
+
+static VALUE
+return_value(value)
+  VALUE value;
+{
+  return value;
+}
 
 typedef struct _Entry {
   VALUE value;
   struct _Entry *next;
 } Entry;
 
-typedef struct _Queue {
+typedef struct _List {
   Entry *entries;
   Entry *last_entry;
   Entry *entry_pool;
-} Queue;
+} List;
 
 static void
-init_queue(queue)
-  Queue *queue;
+init_list(list)
+  List *list;
 {
-  queue->entries = NULL;
-  queue->last_entry = NULL;
-  queue->entry_pool = NULL;
+  list->entries = NULL;
+  list->last_entry = NULL;
+  list->entry_pool = NULL;
 }
 
 static void
-mark_queue(queue)
-  Queue *queue;
+mark_list(list)
+  List *list;
 {
   Entry *entry;
-  for ( entry = queue->entries ; entry ; entry = entry->next ) {
+  for ( entry = list->entries ; entry ; entry = entry->next ) {
     rb_gc_mark(entry->value);
   }
 }
@@ -57,26 +65,26 @@ free_entries(first)
 }
 
 static void
-finalize_queue(queue)
-  Queue *queue;
+finalize_list(list)
+  List *list;
 {
-  free_entries(queue->entries);
-  free_entries(queue->entry_pool);
-  queue->entries = NULL;
-  queue->last_entry = NULL;
-  queue->entry_pool = NULL;
+  free_entries(list->entries);
+  free_entries(list->entry_pool);
+  list->entries = NULL;
+  list->last_entry = NULL;
+  list->entry_pool = NULL;
 }
 
 static void
-put_queue(queue, value)
-  Queue *queue;
+put_list(list, value)
+  List *list;
   VALUE value;
 {
   Entry *entry;
 
-  if (queue->entry_pool) {
-    entry = queue->entry_pool;
-    queue->entry_pool = entry->next;
+  if (list->entry_pool) {
+    entry = list->entry_pool;
+    list->entry_pool = entry->next;
   } else {
     entry = (Entry *)malloc(sizeof(Entry));
   }
@@ -84,51 +92,61 @@ put_queue(queue, value)
   entry->value = value;
   entry->next = NULL;
 
-  if (queue->last_entry) {
-    queue->last_entry->next = entry;
+  if (list->last_entry) {
+    list->last_entry->next = entry;
   } else {
-    queue->entries = entry;
+    list->entries = entry;
   }
-  queue->last_entry = entry;
+  list->last_entry = entry;
 }
 
 static VALUE
-get_queue(queue)
-  Queue *queue;
+get_list(list)
+  List *list;
 {
   Entry *entry;
 
-  entry = queue->entries;
+  entry = list->entries;
   if (!entry) return Qundef;
 
-  queue->entries = entry->next;
-  if ( entry == queue->last_entry ) {
-    queue->last_entry = NULL;
+  list->entries = entry->next;
+  if ( entry == list->last_entry ) {
+    list->last_entry = NULL;
   }
-  entry->next = queue->entry_pool;
-  queue->entry_pool = entry;
+  entry->next = list->entry_pool;
+  list->entry_pool = entry;
 
   return entry->value;
 }
 
 static VALUE
-wake_one(queue)
-  Queue *queue;
+wake_one(list)
+  List *list;
 {
   VALUE waking;
 
   waking = Qnil;
-  while ( queue->entries && !RTEST(waking) ) {
-    waking = rb_rescue2(rb_thread_wakeup, get_queue(queue),
+  while ( list->entries && !RTEST(waking) ) {
+    waking = rb_rescue2(rb_thread_wakeup, get_list(list),
                         return_value, Qnil, rb_eThreadError, 0);
   }
 
   return waking;
 }
 
+static VALUE
+wake_all(list)
+  List *list;
+{
+  while ( list->entries ) {
+    wake_one(list);
+  }
+  return Qnil;
+}
+
 typedef struct _Mutex {
   VALUE owner;
-  Queue waiting;
+  List waiting;
 } Mutex;
 
 static void
@@ -136,7 +154,7 @@ rb_mutex_mark(m)
   Mutex *m;
 {
   rb_gc_mark(m->owner);
-  mark_queue(&m->waiting);
+  mark_list(&m->waiting);
 }
 
 static void
@@ -146,15 +164,8 @@ rb_mutex_free(m)
   if (m->waiting.entries) {
     rb_bug("mutex %p freed with thread(s) waiting", m);
   }
-  finalize_queue(&m->waiting);
+  finalize_list(&m->waiting);
   free(m);
-}
-
-static VALUE
-return_value(value)
-  VALUE value;
-{
-  return value;
 }
 
 static VALUE
@@ -164,7 +175,7 @@ rb_mutex_alloc()
   m = (Mutex *)malloc(sizeof(Mutex));
 
   m->owner = Qfalse;
-  init_queue(&m->waiting);
+  init_list(&m->waiting);
 
   return Data_Wrap_Struct(rb_cMutex, rb_mutex_mark, rb_mutex_free, m);
 }
@@ -215,7 +226,7 @@ rb_mutex_lock(self)
       rb_raise(rb_eThreadError, "deadlock; recursive locking");
     }
 
-    put_queue(&m->waiting, current);
+    put_list(&m->waiting, current);
     rb_thread_stop();
 
     rb_thread_critical = Qtrue;
@@ -284,11 +295,101 @@ rb_mutex_synchronize(self)
   return rb_ensure(rb_yield, Qundef, rb_mutex_unlock, self);
 }
 
+typedef struct _ConditionVariable {
+  List waiting;
+} ConditionVariable;
+
+static void
+rb_condvar_mark(condvar)
+  ConditionVariable *condvar;
+{
+  mark_list(&condvar->waiting);
+}
+
+static void
+rb_condvar_free(condvar)
+  ConditionVariable *condvar;
+{
+  finalize_list(&condvar->waiting);
+  free(condvar);
+}
+
+static VALUE
+rb_condvar_alloc()
+{
+  ConditionVariable *condvar;
+
+  condvar = (ConditionVariable *)malloc(sizeof(ConditionVariable));
+  init_list(&condvar->waiting);
+
+  return Data_Wrap_Struct(rb_cConditionVariable, rb_condvar_mark, rb_condvar_free, condvar);
+}
+
+static VALUE
+rb_condvar_wait(VALUE self, VALUE mutex_v)
+{
+  ConditionVariable *condvar;
+  Mutex *mutex;
+
+  if ( CLASS_OF(mutex_v) != rb_cMutex ) {
+    rb_raise(rb_eTypeError, "Not a Mutex");
+  }
+  Data_Get_Struct(self, ConditionVariable, condvar);
+  Data_Get_Struct(mutex_v, Mutex, mutex);
+
+  rb_thread_critical = Qtrue;
+
+  if (!RTEST(mutex->owner)) {
+    rb_thread_critical = Qfalse;
+    return self;
+  }
+
+  mutex->owner = Qnil;
+  put_list(&mutex->waiting, rb_thread_current());
+  rb_thread_stop();
+
+  rb_mutex_lock(mutex_v);
+
+  return self;
+}
+
+static VALUE
+rb_condvar_broadcast(self)
+  VALUE self;
+{
+  ConditionVariable *condvar;
+
+  Data_Get_Struct(self, ConditionVariable, condvar);
+  
+  rb_thread_critical = Qtrue;
+  rb_ensure(wake_all, (VALUE)&condvar->waiting, set_critical, Qfalse);
+  rb_thread_schedule();
+
+  return self;
+}
+
+static VALUE
+rb_condvar_signal(self)
+  VALUE self;
+{
+  ConditionVariable *condvar;
+
+  Data_Get_Struct(self, ConditionVariable, condvar);
+
+  rb_thread_critical = Qtrue;
+  rb_ensure(wake_one, (VALUE)&condvar->waiting, set_critical, Qfalse);
+  rb_thread_schedule();
+
+  return self;
+}
+
 void
 Init_fastthread()
 {
   rb_require("thread");
+
   rb_eThreadError = rb_const_get(rb_cObject, rb_intern("ThreadError"));
+
   rb_cMutex = rb_define_class("Mutex", rb_cObject);
   rb_define_alloc_func(rb_cMutex, rb_mutex_alloc);
   rb_define_method(rb_cMutex, "locked?", rb_mutex_locked_p, 0);
@@ -297,5 +398,11 @@ Init_fastthread()
   rb_define_method(rb_cMutex, "unlock", rb_mutex_unlock, 0);
   rb_define_method(rb_cMutex, "exclusive_unlock", rb_mutex_exclusive_unlock, 0);
   rb_define_method(rb_cMutex, "synchronize", rb_mutex_synchronize, 0);
+
+  rb_cConditionVariable = rb_define_class("ConditionVariable", rb_cObject);
+  rb_define_alloc_func(rb_cConditionVariable, rb_condvar_alloc);
+  rb_define_method(rb_cConditionVariable, "wait", rb_condvar_wait, 1);
+  rb_define_method(rb_cConditionVariable, "broadcast", rb_condvar_broadcast, 0);
+  rb_define_method(rb_cConditionVariable, "signal", rb_condvar_signal, 0);
 }
 
