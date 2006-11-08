@@ -586,7 +586,7 @@ rb_queue_pop(argc, argv, self)
   lock_mutex(&queue->mutex);
   if ( !queue->values.entries && !should_block ) {
     unlock_mutex(&queue->mutex);
-    rb_raise(rb_eThreadError, "queue_empty");
+    rb_raise(rb_eThreadError, "queue empty");
   }
 
   while (!queue->values.entries) {
