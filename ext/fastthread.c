@@ -25,11 +25,6 @@ typedef struct _Queue {
   Entry *entry_pool;
 } Queue;
 
-typedef struct _Mutex {
-  VALUE owner;
-  Queue waiting;
-} Mutex;
-
 static void
 init_queue(queue)
   Queue *queue;
@@ -115,6 +110,26 @@ get_queue(queue)
 
   return entry->value;
 }
+
+static VALUE
+wake_one(queue)
+  Queue *queue;
+{
+  VALUE waking;
+
+  waking = Qnil;
+  while ( queue->entries && !RTEST(waking) ) {
+    waking = rb_rescue2(rb_thread_wakeup, get_queue(queue),
+                        return_value, Qnil, rb_eThreadError, 0);
+  }
+
+  return waking;
+}
+
+typedef struct _Mutex {
+  VALUE owner;
+  Queue waiting;
+} Mutex;
 
 static void
 rb_mutex_mark(m)
@@ -211,23 +226,6 @@ rb_mutex_lock(self)
 }
 
 static VALUE
-rb_mutex_unlock_inner(m)
-  Mutex *m;
-{
-  VALUE waking;
-
-  m->owner = Qfalse;
-
-  waking = Qnil;
-  while ( m->waiting.entries && !RTEST(waking) ) {
-    waking = rb_rescue2(rb_thread_wakeup, get_queue(&m->waiting),
-                        return_value, Qnil, rb_eThreadError, 0);
-  }
-
-  return waking;
-}
-
-static VALUE
 rb_mutex_unlock(self)
   VALUE self;
 {
@@ -240,7 +238,8 @@ rb_mutex_unlock(self)
   }
 
   rb_thread_critical = Qtrue;
-  waking = rb_mutex_unlock_inner(m);
+  m->owner = Qnil;
+  waking = wake_one(&m->waiting);
   rb_thread_critical = Qfalse;
 
   if (RTEST(waking)) {
@@ -270,7 +269,8 @@ rb_mutex_exclusive_unlock(self)
   }
 
   rb_thread_critical = Qtrue;
-  rb_mutex_unlock_inner(m);
+  m->owner = Qnil;
+  wake_one(&m->waiting);
   rb_ensure(rb_yield, Qundef, set_critical, Qfalse);
 
   return self;
