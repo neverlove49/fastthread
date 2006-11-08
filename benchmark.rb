@@ -1,31 +1,12 @@
 require 'thread'
 require 'benchmark'
-require 'optimized_locking'
-
-class Mutex
-  def noop
-    begin
-      nil
-    ensure
-      nil
-    end
-  end
-end
+require 'thread'
 
 n = 1_000_000
 m = Mutex.new
-om = OptimizedMutex.new
 
 Benchmark.bm do |x|
-  x.report( "optimized open-coded lock:" ) { n.times {
-    om.lock
-    begin
-      nil
-    ensure
-      om.unlock
-    end
-  } }
-  x.report( "brazen open-coded critical:" ) { n.times {
+  x.report( "Thread.critical=:" ) { n.times {
     Thread.critical = true
     begin
       nil
@@ -33,8 +14,7 @@ Benchmark.bm do |x|
       Thread.critical = false
     end
   } }
-  x.report( "optimized synchronize:" ) { n.times { om.synchronize { nil } } }
-  x.report( "timid open-coded critical:" ) { n.times {
+  x.report( "Thread.critical= (saved):" ) { n.times {
     saved = Thread.critical
     Thread.critical = true
     begin
@@ -43,8 +23,8 @@ Benchmark.bm do |x|
       Thread.critical = saved
     end
   } }
-  x.report( "exclusive:" ) { n.times { Thread.exclusive { nil } } }
-  x.report( "open-coded lock:" ) { n.times {
+  x.report( "Thread.exclusive:" ) { n.times { Thread.exclusive { nil } } }
+  x.report( "Mutex#lock/unlock:" ) { n.times {
     m.lock
     begin
       nil
@@ -52,6 +32,6 @@ Benchmark.bm do |x|
       m.unlock
     end
   } }
-  x.report( "synchronize:" ) { n.times { m.synchronize { nil } } }
+  x.report( "Mutex#synchronize:" ) { n.times { m.synchronize { nil } } }
 end
 
