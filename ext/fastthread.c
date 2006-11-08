@@ -31,31 +31,107 @@ typedef struct _Mutex {
 } Mutex;
 
 static void
+init_queue(queue)
+  Queue *queue;
+{
+  queue->entries = NULL;
+  queue->last_entry = NULL;
+  queue->entry_pool = NULL;
+}
+
+static void
+mark_queue(queue)
+  Queue *queue;
+{
+  Entry *entry;
+  for ( entry = queue->entries ; entry ; entry = entry->next ) {
+    rb_gc_mark(entry->value);
+  }
+}
+
+static void
+free_entries(first)
+  Entry *first;
+{
+  Entry *next;
+  while (first) {
+    next = first->next;
+    free(first);
+    first = next;
+  }
+}
+
+static void
+finalize_queue(queue)
+  Queue *queue;
+{
+  free_entries(queue->entries);
+  free_entries(queue->entry_pool);
+  queue->entries = NULL;
+  queue->last_entry = NULL;
+  queue->entry_pool = NULL;
+}
+
+static void
+put_queue(queue, value)
+  Queue *queue;
+  VALUE value;
+{
+  Entry *entry;
+
+  if (queue->entry_pool) {
+    entry = queue->entry_pool;
+    queue->entry_pool = entry->next;
+  } else {
+    entry = (Entry *)malloc(sizeof(Entry));
+  }
+
+  entry->value = value;
+  entry->next = NULL;
+
+  if (queue->last_entry) {
+    queue->last_entry->next = entry;
+  } else {
+    queue->entries = entry;
+  }
+  queue->last_entry = entry;
+}
+
+static VALUE
+get_queue(queue)
+  Queue *queue;
+{
+  Entry *entry;
+
+  entry = queue->entries;
+  if (!entry) return Qundef;
+
+  queue->entries = entry->next;
+  if ( entry == queue->last_entry ) {
+    queue->last_entry = NULL;
+  }
+  entry->next = queue->entry_pool;
+  queue->entry_pool = entry;
+
+  return entry->value;
+}
+
+static void
 rb_mutex_mark(m)
   Mutex *m;
 {
   rb_gc_mark(m->owner);
-  Entry *e=m->waiting.entries;
-  while (e) {
-    rb_gc_mark(e->value);
-    e = e->next;
-  }
+  mark_queue(&m->waiting);
 }
 
 static void
 rb_mutex_free(m)
   Mutex *m;
 {
-  Entry *e;
   if (m->waiting.entries) {
     rb_bug("mutex %p freed with thread(s) waiting", m);
   }
-  e = m->waiting.entry_pool;
-  while (e) {
-    Entry *next = e->next;
-    free(e);
-    e = next;
-  }
+  finalize_queue(&m->waiting);
   free(m);
 }
 
@@ -71,10 +147,9 @@ rb_mutex_alloc()
 {
   Mutex *m;
   m = (Mutex *)malloc(sizeof(Mutex));
+
   m->owner = Qfalse;
-  m->waiting.entries = NULL;
-  m->waiting.last_entry = NULL;
-  m->waiting.entry_pool = NULL;
+  init_queue(&m->waiting);
 
   return Data_Wrap_Struct(rb_cMutex, rb_mutex_mark, rb_mutex_free, m);
 }
@@ -85,7 +160,7 @@ rb_mutex_locked_p(self)
 {
   Mutex *m;
   Data_Get_Struct(self, Mutex, m);
-  return ( m->owner ? Qtrue : Qfalse );
+  return ( RTEST(m->owner) ? Qtrue : Qfalse );
 }
 
 static VALUE
@@ -121,30 +196,13 @@ rb_mutex_lock(self)
 
   rb_thread_critical = Qtrue;
   while (RTEST(m->owner)) {
-    Entry *e;
-
     if ( m->owner == current ) {
       rb_raise(rb_eThreadError, "deadlock; recursive locking");
     }
 
-    if (m->waiting.entry_pool) {
-      e = m->waiting.entry_pool;
-      m->waiting.entry_pool = e->next;
-    } else {
-      e = (Entry *)malloc(sizeof(Entry));
-    }
-
-    e->value = current;
-    e->next = NULL;
-
-    if (m->waiting.last_entry) {
-      m->waiting.last_entry->next = e;
-    } else {
-      m->waiting.entries = e;
-    }
-    m->waiting.last_entry = e;
-
+    put_queue(&m->waiting, current);
     rb_thread_stop();
+
     rb_thread_critical = Qtrue;
   }
   m->owner = current; 
@@ -162,17 +220,8 @@ rb_mutex_unlock_inner(m)
 
   waking = Qnil;
   while ( m->waiting.entries && !RTEST(waking) ) {
-    Entry *e;
-
-    e = m->waiting.entries;
-    m->waiting.entries = e->next;
-    if (!m->waiting.entries) {
-      m->waiting.last_entry = NULL;
-    }
-    e->next = m->waiting.entry_pool;
-    m->waiting.entry_pool = e;
-
-    waking = rb_rescue2(rb_thread_wakeup, e->value, return_value, Qnil, rb_eThreadError, 0);
+    waking = rb_rescue2(rb_thread_wakeup, get_queue(&m->waiting),
+                        return_value, Qnil, rb_eThreadError, 0);
   }
 
   return waking;
