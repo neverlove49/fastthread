@@ -197,7 +197,7 @@ static void
 init_mutex(mutex)
   Mutex *mutex;
 {
-  mutex->owner = Qfalse;
+  mutex->owner = Qnil;
   init_list(&mutex->waiting);
 }
 
