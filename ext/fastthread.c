@@ -14,26 +14,30 @@
 static VALUE rb_cMutex;
 static VALUE rb_eThreadError;
 
-typedef struct _WaitEntry {
-  struct _WaitEntry *next;
-  VALUE thread;
-} WaitEntry;
+typedef struct _Entry {
+  VALUE value;
+  struct _Entry *next;
+} Entry;
+
+typedef struct _Queue {
+  Entry *entries;
+  Entry *last_entry;
+  Entry *entry_pool;
+} Queue;
 
 typedef struct _Mutex {
-  VALUE locked;
-  WaitEntry *waiting;
-  WaitEntry *last_waiting;
-  WaitEntry *entry_pool;
+  VALUE owner;
+  Queue waiting;
 } Mutex;
 
 static void
 rb_mutex_mark(m)
   Mutex *m;
 {
-  rb_gc_mark(m->locked);
-  WaitEntry *e=m->waiting;
+  rb_gc_mark(m->owner);
+  Entry *e=m->waiting.entries;
   while (e) {
-    rb_gc_mark(e->thread);
+    rb_gc_mark(e->value);
     e = e->next;
   }
 }
@@ -42,13 +46,13 @@ static void
 rb_mutex_free(m)
   Mutex *m;
 {
-  WaitEntry *e;
-  if (m->waiting) {
+  Entry *e;
+  if (m->waiting.entries) {
     rb_bug("mutex %p freed with thread(s) waiting", m);
   }
-  e = m->entry_pool;
+  e = m->waiting.entry_pool;
   while (e) {
-    WaitEntry *next = e->next;
+    Entry *next = e->next;
     free(e);
     e = next;
   }
@@ -67,10 +71,10 @@ rb_mutex_alloc()
 {
   Mutex *m;
   m = (Mutex *)malloc(sizeof(Mutex));
-  m->locked = Qfalse;
-  m->waiting = NULL;
-  m->last_waiting = NULL;
-  m->entry_pool = NULL;
+  m->owner = Qfalse;
+  m->waiting.entries = NULL;
+  m->waiting.last_entry = NULL;
+  m->waiting.entry_pool = NULL;
 
   return Data_Wrap_Struct(rb_cMutex, rb_mutex_mark, rb_mutex_free, m);
 }
@@ -81,7 +85,7 @@ rb_mutex_locked_p(self)
 {
   Mutex *m;
   Data_Get_Struct(self, Mutex, m);
-  return ( m->locked ? Qtrue : Qfalse );
+  return ( m->owner ? Qtrue : Qfalse );
 }
 
 static VALUE
@@ -96,8 +100,8 @@ rb_mutex_try_lock(self)
   result = Qfalse;
 
   rb_thread_critical = Qtrue;
-  if (!RTEST(m->locked)) {
-    m->locked = rb_thread_current();
+  if (!RTEST(m->owner)) {
+    m->owner = rb_thread_current();
     result = Qtrue;
   }
   rb_thread_critical = Qfalse;
@@ -116,34 +120,34 @@ rb_mutex_lock(self)
   current = rb_thread_current();
 
   rb_thread_critical = Qtrue;
-  while (RTEST(m->locked)) {
-    WaitEntry *e;
+  while (RTEST(m->owner)) {
+    Entry *e;
 
-    if ( m->locked == current ) {
+    if ( m->owner == current ) {
       rb_raise(rb_eThreadError, "deadlock; recursive locking");
     }
 
-    if (m->entry_pool) {
-      e = m->entry_pool;
-      m->entry_pool = e->next;
+    if (m->waiting.entry_pool) {
+      e = m->waiting.entry_pool;
+      m->waiting.entry_pool = e->next;
     } else {
-      e = (WaitEntry *)malloc(sizeof(WaitEntry));
+      e = (Entry *)malloc(sizeof(Entry));
     }
 
-    e->thread = current;
+    e->value = current;
     e->next = NULL;
 
-    if (m->last_waiting) {
-      m->last_waiting->next = e;
+    if (m->waiting.last_entry) {
+      m->waiting.last_entry->next = e;
     } else {
-      m->waiting = e;
+      m->waiting.entries = e;
     }
-    m->last_waiting = e;
+    m->waiting.last_entry = e;
 
     rb_thread_stop();
     rb_thread_critical = Qtrue;
   }
-  m->locked = current; 
+  m->owner = current; 
   rb_thread_critical = Qfalse;
   return self;
 }
@@ -154,21 +158,21 @@ rb_mutex_unlock_inner(m)
 {
   VALUE waking;
 
-  m->locked = Qfalse;
+  m->owner = Qfalse;
 
   waking = Qnil;
-  while ( m->waiting && !RTEST(waking) ) {
-    WaitEntry *e;
+  while ( m->waiting.entries && !RTEST(waking) ) {
+    Entry *e;
 
-    e = m->waiting;
-    m->waiting = e->next;
-    if (!m->waiting) {
-      m->last_waiting = NULL;
+    e = m->waiting.entries;
+    m->waiting.entries = e->next;
+    if (!m->waiting.entries) {
+      m->waiting.last_entry = NULL;
     }
-    e->next = m->entry_pool;
-    m->entry_pool = e;
+    e->next = m->waiting.entry_pool;
+    m->waiting.entry_pool = e;
 
-    waking = rb_rescue2(rb_thread_wakeup, e->thread, return_value, Qnil, rb_eThreadError, 0);
+    waking = rb_rescue2(rb_thread_wakeup, e->value, return_value, Qnil, rb_eThreadError, 0);
   }
 
   return waking;
@@ -182,7 +186,7 @@ rb_mutex_unlock(self)
   VALUE waking;
   Data_Get_Struct(self, Mutex, m);
 
-  if (!RTEST(m->locked)) {
+  if (!RTEST(m->owner)) {
     return Qnil;
   }
 
@@ -212,7 +216,7 @@ rb_mutex_exclusive_unlock(self)
   Mutex *m;
   Data_Get_Struct(self, Mutex, m);
 
-  if (!RTEST(m->locked)) {
+  if (!RTEST(m->owner)) {
     return Qnil;
   }
 
