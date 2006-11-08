@@ -190,7 +190,7 @@ rb_mutex_synchronize(self)
 }
 
 void
-Init_optimized_locking()
+Init_fastthread()
 {
   rb_require("thread");
   rb_eThreadError = rb_const_get(rb_cObject, rb_intern("ThreadError"));
