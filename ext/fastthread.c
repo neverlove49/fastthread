@@ -708,6 +708,14 @@ rb_sized_queue_max_set(self, value)
 }
 
 static VALUE
+rb_sized_queue_initialize(self, max)
+  VALUE self;
+  VALUE max;
+{
+  return rb_sized_queue_max_set(self, max);
+}
+
+static VALUE
 rb_sized_queue_num_waiting(self)
   VALUE self;
 {
@@ -797,6 +805,7 @@ Init_fastthread()
 
   rb_cSizedQueue = rb_define_class("SizedQueue", rb_cQueue);
   rb_define_alloc_func(rb_cSizedQueue, rb_sized_queue_alloc);
+  rb_define_method(rb_cSizedQueue, "initialize", rb_sized_queue_initialize, 1);
   rb_define_method(rb_cSizedQueue, "clear", rb_sized_queue_clear, 0);
   rb_define_method(rb_cSizedQueue, "max", rb_sized_queue_max, 0);
   rb_define_method(rb_cSizedQueue, "max=", rb_sized_queue_max_set, 1);
