@@ -777,6 +777,7 @@ Init_fastthread()
 
   rb_cMutex = rb_define_class("Mutex", rb_cObject);
   rb_define_alloc_func(rb_cMutex, rb_mutex_alloc);
+  rb_define_method(rb_cMutex, "initialize", return_value, 0);
   rb_define_method(rb_cMutex, "locked?", rb_mutex_locked_p, 0);
   rb_define_method(rb_cMutex, "try_lock", rb_mutex_try_lock, 0);
   rb_define_method(rb_cMutex, "lock", rb_mutex_lock, 0);
@@ -786,12 +787,14 @@ Init_fastthread()
 
   rb_cConditionVariable = rb_define_class("ConditionVariable", rb_cObject);
   rb_define_alloc_func(rb_cConditionVariable, rb_condvar_alloc);
+  rb_define_method(rb_cConditionVariable, "initialize", return_value, 0);
   rb_define_method(rb_cConditionVariable, "wait", rb_condvar_wait, 1);
   rb_define_method(rb_cConditionVariable, "broadcast", rb_condvar_broadcast, 0);
   rb_define_method(rb_cConditionVariable, "signal", rb_condvar_signal, 0);
 
   rb_cQueue = rb_define_class("Queue", rb_cObject);
   rb_define_alloc_func(rb_cQueue, rb_queue_alloc);
+  rb_define_method(rb_cQueue, "initialize", return_value, 0);
   rb_define_method(rb_cQueue, "clear", rb_queue_clear, 0);
   rb_define_method(rb_cQueue, "empty?", rb_queue_empty_p, 0);
   rb_define_method(rb_cQueue, "length", rb_queue_length, 0);
