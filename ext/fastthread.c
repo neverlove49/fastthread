@@ -77,7 +77,7 @@ finalize_list(list)
 }
 
 static void
-put_list(list, value)
+push_list(list, value)
   List *list;
   VALUE value;
 {
@@ -104,7 +104,7 @@ put_list(list, value)
 }
 
 static VALUE
-get_list(list)
+shift_list(list)
   List *list;
 {
   Entry *entry;
@@ -145,7 +145,7 @@ wake_one(list)
 
   waking = Qnil;
   while ( list->entries && !RTEST(waking) ) {
-    waking = rb_rescue2(rb_thread_wakeup, get_list(list),
+    waking = rb_rescue2(rb_thread_wakeup, shift_list(list),
                         return_value, Qnil, rb_eThreadError, 0);
   }
 
@@ -254,7 +254,7 @@ lock_mutex(mutex)
       rb_raise(rb_eThreadError, "deadlock; recursive locking");
     }
 
-    put_list(&mutex->waiting, current);
+    push_list(&mutex->waiting, current);
     rb_thread_stop();
 
     rb_thread_critical = Qtrue;
@@ -404,7 +404,7 @@ wait_condvar(condvar, mutex)
     rb_raise(rb_eThreadError, "Not owner");
   }
   mutex->owner = Qnil;
-  put_list(&condvar->waiting, rb_thread_current());
+  push_list(&condvar->waiting, rb_thread_current());
   rb_thread_stop();
 
   lock_mutex(mutex);
@@ -597,7 +597,7 @@ rb_queue_pop(argc, argv, self)
     wait_condvar(&queue->value_available, &queue->mutex);
   }
 
-  result = get_list(&queue->values);
+  result = shift_list(&queue->values);
   unlock_mutex(&queue->mutex);
 
   return result;
@@ -612,7 +612,7 @@ rb_queue_push(self, value)
   Data_Get_Struct(self, Queue, queue);
 
   lock_mutex(&queue->mutex);
-  put_list(&queue->values, value);
+  push_list(&queue->values, value);
   unlock_mutex(&queue->mutex);
   signal_condvar(&queue->value_available);
 
@@ -762,7 +762,7 @@ rb_sized_queue_push(self, value)
   while ( queue->queue.values.size >= queue->capacity ) {
     wait_condvar(&queue->space_available, &queue->queue.mutex);
   }
-  put_list(&queue->queue.values);
+  push_list(&queue->queue.values);
   unlock_mutex(&queue->queue.mutex);
   
   return self;
