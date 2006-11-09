@@ -609,7 +609,7 @@ rb_queue_push(self, value)
   Data_Get_Struct(self, Queue, queue);
 
   lock_mutex(&queue->mutex);
-  put_list(&queue->values);
+  put_list(&queue->values, value);
   unlock_mutex(&queue->mutex);
   signal_condvar(&queue->value_available);
 
