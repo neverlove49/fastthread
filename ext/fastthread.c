@@ -399,6 +399,10 @@ wait_condvar(condvar, mutex)
     rb_thread_critical = Qfalse;
     return;
   }
+  if ( mutex->owner != rb_thread_current() ) {
+    rb_thread_critical = Qfalse;
+    rb_raise(rb_eThreadError, "Not owner");
+  }
   mutex->owner = Qnil;
   put_list(&condvar->waiting, rb_thread_current());
   rb_thread_stop();
@@ -591,7 +595,6 @@ rb_queue_pop(argc, argv, self)
 
   while (!queue->values.entries) {
     wait_condvar(&queue->value_available, &queue->mutex);
-    lock_mutex(&queue->mutex);
   }
 
   result = get_list(&queue->values);
