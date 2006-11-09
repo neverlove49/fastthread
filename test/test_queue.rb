@@ -8,7 +8,8 @@ class TestQueue < Test::Unit::TestCase
     s = ""
     t = Thread.new do
       for c in "a".."f"
-        q << c
+        q.push c
+        Thread.pass
       end
     end
     6.times do
