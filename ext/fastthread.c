@@ -323,6 +323,7 @@ rb_mutex_exclusive_unlock(self)
   VALUE self;
 {
   Mutex *mutex;
+  VALUE waking;
   Data_Get_Struct(self, Mutex, mutex);
 
   if (!RTEST(mutex->owner)) {
@@ -331,8 +332,12 @@ rb_mutex_exclusive_unlock(self)
 
   rb_thread_critical = Qtrue;
   mutex->owner = Qnil;
-  wake_one(&mutex->waiting);
+  waking = wake_one(&mutex->waiting);
   rb_ensure(rb_yield, Qundef, set_critical, Qfalse);
+
+  if (RTEST(waking)) {
+    rb_rescue2(rb_thread_run, waking, return_value, Qnil, rb_eThreadError, 0);
+  }
 
   return self;
 }
@@ -446,9 +451,12 @@ static void
 signal_condvar(condvar)
   ConditionVariable *condvar;
 {
+  VALUE waking;
   rb_thread_critical = Qtrue;
-  rb_ensure(wake_one, (VALUE)&condvar->waiting, set_critical, Qfalse);
-  rb_thread_schedule();
+  waking = rb_ensure(wake_one, (VALUE)&condvar->waiting, set_critical, Qfalse);
+  if (RTEST(waking)) {
+    rb_rescue2(rb_thread_run, waking, return_value, Qnil, rb_eThreadError, 0);
+  }
 }
 
 static VALUE
