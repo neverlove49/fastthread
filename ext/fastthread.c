@@ -761,7 +761,6 @@ rb_sized_queue_push(self, value)
   lock_mutex(&queue->queue.mutex);
   while ( queue->queue.values.size >= queue->capacity ) {
     wait_condvar(&queue->space_available, &queue->queue.mutex);
-    lock_mutex(&queue->queue.mutex);
   }
   put_list(&queue->queue.values);
   unlock_mutex(&queue->queue.mutex);
