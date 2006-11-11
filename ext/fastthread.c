@@ -291,7 +291,7 @@ unlock_mutex(mutex)
   rb_thread_critical = Qfalse;
 
   if (RTEST(mutex->owner)) {
-    rb_rescue2(rb_thread_run, mutex->owner, unlock_mutex, (VALUE)mutex,
+    rb_rescue2(rb_thread_run, mutex->owner, return_value, Qnil,
                rb_eThreadError, 0);
   }
 
@@ -336,7 +336,7 @@ rb_mutex_exclusive_unlock(self)
   rb_ensure(rb_yield, Qundef, set_critical, Qfalse);
 
   if (RTEST(mutex->owner)) {
-    rb_rescue2(rb_thread_run, mutex->owner, rb_mutex_exclusive_unlock, self,
+    rb_rescue2(rb_thread_run, mutex->owner, return_value, Qnil,
                rb_eThreadError, 0);
   }
 
