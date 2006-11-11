@@ -249,21 +249,17 @@ lock_mutex(mutex)
 
   rb_thread_critical = Qtrue;
 
-  if ( mutex->owner == current ) {
-    rb_thread_critical = Qfalse;
-    rb_raise(rb_eThreadError, "deadlock; recursive locking");
-  }
-
-  if (RTEST(mutex->owner)) {
-    while ( mutex->owner != current ) {
-      push_list(&mutex->waiting, current);
-      /* ownership will be conferred by the thread that wakes us */
-      rb_thread_stop();
-      rb_thread_critical = Qtrue;
+  while (RTEST(mutex->owner)) {
+    if ( mutex->owner == current ) {
+      rb_raise(rb_eThreadError, "deadlock; recursive locking");
     }
-  } else {
-    mutex->owner = current;
+
+    push_list(&mutex->waiting, current);
+    rb_thread_stop();
+
+    rb_thread_critical = Qtrue;
   }
+  mutex->owner = current; 
 
   rb_thread_critical = Qfalse;
 }
@@ -278,24 +274,26 @@ rb_mutex_lock(self)
   return self;
 }
 
-static VALUE
+static int
 unlock_mutex(mutex)
   Mutex *mutex;
 {
+  VALUE waking;
+
   rb_thread_critical = Qtrue;
   if (!RTEST(mutex->owner)) {
     rb_thread_critical = Qfalse;
-    return Qfalse;
+    return 0;
   }
-  mutex->owner = wake_one(&mutex->waiting);
+  mutex->owner = Qnil;
+  waking = wake_one(&mutex->waiting);
   rb_thread_critical = Qfalse;
 
-  if (RTEST(mutex->owner)) {
-    rb_rescue2(rb_thread_run, mutex->owner, unlock_mutex, (VALUE)mutex,
-               rb_eThreadError, 0);
+  if (RTEST(waking)) {
+    rb_rescue2(rb_thread_run, waking, return_value, Qnil, rb_eThreadError, 0);
   }
 
-  return Qtrue;
+  return 1;
 }
 
 static VALUE
@@ -305,7 +303,7 @@ rb_mutex_unlock(self)
   Mutex *mutex;
   Data_Get_Struct(self, Mutex, mutex);
 
-  if (RTEST(unlock_mutex(mutex))) {
+  if (unlock_mutex(mutex)) {
     return self;
   } else {
     return Qnil;
@@ -325,19 +323,20 @@ rb_mutex_exclusive_unlock(self)
   VALUE self;
 {
   Mutex *mutex;
+  VALUE waking;
   Data_Get_Struct(self, Mutex, mutex);
 
-  rb_thread_critical = Qtrue;
   if (!RTEST(mutex->owner)) {
-    rb_thread_critical = Qfalse;
     return Qnil;
   }
-  mutex->owner = wake_one(&mutex->waiting);
+
+  rb_thread_critical = Qtrue;
+  mutex->owner = Qnil;
+  waking = wake_one(&mutex->waiting);
   rb_ensure(rb_yield, Qundef, set_critical, Qfalse);
 
-  if (RTEST(mutex->owner)) {
-    rb_rescue2(rb_thread_run, mutex->owner, rb_mutex_exclusive_unlock, self,
-               rb_eThreadError, 0);
+  if (RTEST(waking)) {
+    rb_rescue2(rb_thread_run, waking, return_value, Qnil, rb_eThreadError, 0);
   }
 
   return self;
