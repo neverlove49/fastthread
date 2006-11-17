@@ -274,26 +274,42 @@ rb_mutex_lock(self)
   return self;
 }
 
-static int
-unlock_mutex(mutex)
+static VALUE
+unlock_mutex_inner(mutex, critical)
   Mutex *mutex;
+  VALUE critical;
 {
   VALUE waking;
 
   rb_thread_critical = Qtrue;
   if (!RTEST(mutex->owner)) {
-    rb_thread_critical = Qfalse;
-    return 0;
+    rb_thread_critical = critical;
+    return Qundef;
   }
   mutex->owner = Qnil;
   waking = wake_one(&mutex->waiting);
-  rb_thread_critical = Qfalse;
+  rb_thread_critical = critical;
+
+  return waking;
+}
+
+static VALUE
+unlock_mutex(mutex)
+  Mutex *mutex;
+{
+  VALUE waking;
+
+  waking = unlock_mutex_inner(mutex, Qfalse);
+
+  if ( waking == Qundef ) {
+    return Qfalse;
+  }
 
   if (RTEST(waking)) {
     rb_rescue2(rb_thread_run, waking, return_value, Qnil, rb_eThreadError, 0);
   }
 
-  return 1;
+  return Qtrue;
 }
 
 static VALUE
@@ -303,7 +319,7 @@ rb_mutex_unlock(self)
   Mutex *mutex;
   Data_Get_Struct(self, Mutex, mutex);
 
-  if (unlock_mutex(mutex)) {
+  if (RTEST(unlock_mutex(mutex))) {
     return self;
   } else {
     return Qnil;
@@ -326,13 +342,13 @@ rb_mutex_exclusive_unlock(self)
   VALUE waking;
   Data_Get_Struct(self, Mutex, mutex);
 
-  if (!RTEST(mutex->owner)) {
+  waking = unlock_mutex_inner(mutex, Qtrue);
+
+  if ( waking == Qundef ) {
+    rb_thread_critical = Qfalse;
     return Qnil;
   }
 
-  rb_thread_critical = Qtrue;
-  mutex->owner = Qnil;
-  waking = wake_one(&mutex->waiting);
   rb_ensure(rb_yield, Qundef, set_critical, Qfalse);
 
   if (RTEST(waking)) {
