@@ -10,7 +10,7 @@ end
 
 gemspec = Gem::Specification.new do |gemspec|
   gemspec.name = "fastthread"
-  gemspec.version = "0.2"
+  gemspec.version = "0.3"
   gemspec.platform = Gem::Platform::RUBY
   gemspec.author = "MenTaLguY <mental@rydia.net>"
   gemspec.summary = "Optimized replacement for thread.rb primitives"
