@@ -202,12 +202,13 @@ init_mutex(mutex)
 }
 
 static VALUE
-rb_mutex_alloc()
+rb_mutex_alloc(klass)
+  VALUE klass;
 {
   Mutex *mutex;
   mutex = (Mutex *)malloc(sizeof(Mutex));
   init_mutex(mutex);
-  return Data_Wrap_Struct(rb_cMutex, mark_mutex, free_mutex, mutex);
+  return Data_Wrap_Struct(klass, mark_mutex, free_mutex, mutex);
 }
 
 static VALUE
@@ -405,14 +406,15 @@ init_condvar(condvar)
 }
 
 static VALUE
-rb_condvar_alloc()
+rb_condvar_alloc(klass)
+  VALUE klass;
 {
   ConditionVariable *condvar;
 
   condvar = (ConditionVariable *)malloc(sizeof(ConditionVariable));
   init_condvar(condvar);
 
-  return Data_Wrap_Struct(rb_cConditionVariable, mark_condvar, free_condvar, condvar);
+  return Data_Wrap_Struct(klass, mark_condvar, free_condvar, condvar);
 }
 
 static void
@@ -532,12 +534,13 @@ init_queue(queue)
 }
 
 static VALUE
-rb_queue_alloc()
+rb_queue_alloc(klass)
+  VALUE klass;
 {
   Queue *queue;
   queue = (Queue *)malloc(sizeof(Queue));
   init_queue(queue);
-  return Data_Wrap_Struct(rb_cQueue, mark_queue, free_queue, queue);
+  return Data_Wrap_Struct(klass, mark_queue, free_queue, queue);
 }
 
 static VALUE
@@ -672,7 +675,8 @@ free_sized_queue(queue)
 }
 
 static VALUE
-rb_sized_queue_alloc()
+rb_sized_queue_alloc(klass)
+  VALUE klass;
 {
   SizedQueue *queue;
   queue = (SizedQueue *)malloc(sizeof(SizedQueue));
@@ -681,8 +685,7 @@ rb_sized_queue_alloc()
   init_condvar(&queue->space_available);
   queue->capacity = 0;
 
-  return Data_Wrap_Struct(rb_cSizedQueue, mark_sized_queue, free_sized_queue,
-                          queue);
+  return Data_Wrap_Struct(klass, mark_sized_queue, free_sized_queue, queue);
 }
 
 static VALUE
