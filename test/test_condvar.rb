@@ -27,35 +27,5 @@ class TestCondVar < Test::Unit::TestCase
 
     assert_equal "abc", s
   end
-
-  def test_signal_order
-    m = Mutex.new
-    cv = ConditionVariable.new
-    ready = false
-    s = ""
-
-    threads = ("a".."f").map do |c|
-      thread = Thread.new do
-        m.synchronize do
-          ready = true
-          cv.wait m
-          s << c
-          ready = true
-        end
-      end
-      nil until m.synchronize { ready }
-      thread
-    end
-
-    threads.each_with_index do |thread, index|
-      assert thread.alive?
-      ready = false
-      cv.signal
-      nil until m.synchronize { ready }
-      assert_equal( index + 1, m.synchronize { s.size } )
-    end
-
-    assert_equal "abcdef", s
-  end
 end 
 
