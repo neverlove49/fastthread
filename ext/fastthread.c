@@ -252,6 +252,7 @@ lock_mutex(mutex)
 
   while (RTEST(mutex->owner)) {
     if ( mutex->owner == current ) {
+      rb_thread_critical = Qfalse;
       rb_raise(rb_eThreadError, "deadlock; recursive locking");
     }
 
