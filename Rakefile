@@ -19,7 +19,7 @@ gemspec = Gem::Specification.new do |gemspec|
   gemspec.files = %w( Rakefile ) +
                   Dir.glob( 'test/*.rb' ) +
                   Dir.glob( 'ext/**/*.{c,rb}' )
-  gemspec.require_path = 'ext'
+  gemspec.require_path = 'ext/fastthread'
 end
 
 Rake::GemPackageTask.new( gemspec ) do |task|
