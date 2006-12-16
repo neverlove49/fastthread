@@ -4,17 +4,30 @@ require 'fastthread'
 
 class TestQueue < Test::Unit::TestCase
   def check_sequence( q )
+    range = "a".."f"
+
     s = ""
+    e = nil
+
     t = Thread.new do
-      for c in "a".."f"
-        q.push c
-        Thread.pass
+      begin
+        for c in range
+          q.push c
+          s << c
+          Thread.pass
+        end
+      rescue Exception => e
       end
     end
-    6.times do
-      s << q.shift
+
+    for c in range
+      unless t.alive?
+        raise e if e
+        assert_equal range.to_a.join, s, "expected all values pushed"
+      end
+      x = q.shift
+      assert_equal c, x, "sequence error: expected #{ c } but got #{ x }"
     end
-    assert_equal "abcdef", s
   end
 
   def test_queue
