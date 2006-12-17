@@ -4,7 +4,7 @@ require 'rake/testtask'
 require 'rake/gempackagetask'
 require 'tools/rakehelp'
 
-GEM_VERSION="0.5.3"
+GEM_VERSION="0.5.3.1"
 
 setup_extension('fastthread', 'fastthread')
 
@@ -25,7 +25,7 @@ gemspec = Gem::Specification.new do |gemspec|
   gemspec.author = "MenTaLguY <mental@rydia.net>"
   gemspec.summary = "Optimized replacement for thread.rb primitives"
   gemspec.test_file = 'test/test_all.rb'
-  gemspec.files = %w( Rakefile ) +
+  gemspec.files = %w( Rakefile setup.rb ) +
                   Dir.glob( 'test/*.rb' ) +
                   Dir.glob( 'ext/**/*.{c,rb}' ) +
                   Dir.glob( 'tools/*.rb' )
