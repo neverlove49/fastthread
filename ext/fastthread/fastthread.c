@@ -134,6 +134,23 @@ push_multiple_list(list, values, count)
   }
 }
 
+static void recycle_entries _((List *, Entry *, Entry *));
+
+static void
+recycle_entries(list, first_entry, last_entry)
+  List *list;
+  Entry *first_entry;
+  Entry *last_entry;
+{
+  if (USE_MEM_POOLS) {
+    last_entry->next = list->entry_pool;
+    list->entry_pool = first_entry;
+  } else {
+    last_entry->next = NULL;
+    free_entries(first_entry);
+  }
+}
+
 static VALUE shift_list _((List *));
 
 static VALUE
@@ -154,14 +171,30 @@ shift_list(list)
   --list->size;
 
   value = entry->value;
-  if (USE_MEM_POOLS) {
-    entry->next = list->entry_pool;
-    list->entry_pool = entry;
-  } else {
-    free(entry);
-  }
+  recycle_entries(list, entry, entry);
 
   return value;
+}
+
+static void remove_one _((List *, VALUE));
+
+static void
+remove_one(list, value)
+  List *list;
+  VALUE value;
+{
+  Entry **ref;
+  Entry *entry;
+  for (ref = &list->entries, entry = list->entries;
+       entry != NULL;
+       ref = &entry->next, entry = entry->next)
+  {
+    if (entry->value == value) {
+      *ref = entry->next;
+      recycle_entries(list, entry, entry);
+      break;
+    }
+  }
 }
 
 static void clear_list _((List *));
@@ -171,12 +204,7 @@ clear_list(list)
   List *list;
 {
   if (list->last_entry) {
-    if (USE_MEM_POOLS) {
-      list->last_entry->next = list->entry_pool;
-      list->entry_pool = list->entries;
-    } else {
-      free_entries(list->entries);
-    }
+    recycle_entries(list, list->entries, list->last_entry);
     list->entries = NULL;
     list->last_entry = NULL;
     list->size = 0;
@@ -244,6 +272,39 @@ wake_all(list)
     wake_one(list);
   }
   return Qnil;
+}
+
+static VALUE wait_inner _((List *));
+
+static VALUE
+wait_inner(list)
+  List *list;
+{
+  push_list(list, rb_thread_current());
+  rb_thread_stop();
+  return Qnil;
+}
+
+static VALUE wait_cleanup _((List *));
+
+static VALUE
+wait_cleanup(list)
+  List *list;
+{
+  /* cleanup in case of spurious wakeups */
+  rb_thread_critical = 1;
+  remove_one(list, rb_thread_current());
+  rb_thread_critical = 0;
+  return Qnil;
+}
+
+static void wait _((List *));
+
+static void
+wait(list)
+  List *list;
+{
+  rb_ensure(wait_inner, (VALUE)list, wait_cleanup, (VALUE)list);
 }
 
 static void assert_no_survivors _((List *, const char *, void *));
@@ -365,9 +426,7 @@ lock_mutex(mutex)
   rb_thread_critical = 1;
 
   while (RTEST(mutex->owner)) {
-    push_list(&mutex->waiting, current);
-    rb_thread_stop();
-
+    wait(&mutex->waiting);
     rb_thread_critical = 1;
   }
   mutex->owner = current; 
@@ -571,8 +630,7 @@ wait_condvar(condvar, mutex)
     rb_raise(private_eThreadError, "Not owner");
   }
   mutex->owner = Qnil;
-  push_list(&condvar->waiting, rb_thread_current());
-  rb_thread_stop();
+  wait(&condvar->waiting);
 
   lock_mutex(mutex);
 }
@@ -598,8 +656,7 @@ legacy_wait(unused, args)
   VALUE unused;
   legacy_wait_args *args;
 {
-  push_list(&args->condvar->waiting, rb_thread_current());
-  rb_thread_stop();
+  wait(&args->condvar->waiting);
   rb_funcall(args->mutex, rb_intern("lock"), 0);
   return Qnil;
 }
