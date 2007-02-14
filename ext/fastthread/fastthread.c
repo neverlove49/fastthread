@@ -274,10 +274,10 @@ wake_all(list)
   return Qnil;
 }
 
-static VALUE wait_inner _((List *));
+static VALUE wait_list_inner _((List *));
 
 static VALUE
-wait_inner(list)
+wait_list_inner(list)
   List *list;
 {
   push_list(list, rb_thread_current());
@@ -285,10 +285,10 @@ wait_inner(list)
   return Qnil;
 }
 
-static VALUE wait_cleanup _((List *));
+static VALUE wait_list_cleanup _((List *));
 
 static VALUE
-wait_cleanup(list)
+wait_list_cleanup(list)
   List *list;
 {
   /* cleanup in case of spurious wakeups */
@@ -298,13 +298,13 @@ wait_cleanup(list)
   return Qnil;
 }
 
-static void wait _((List *));
+static void wait_list _((List *));
 
 static void
-wait(list)
+wait_list(list)
   List *list;
 {
-  rb_ensure(wait_inner, (VALUE)list, wait_cleanup, (VALUE)list);
+  rb_ensure(wait_list_inner, (VALUE)list, wait_list_cleanup, (VALUE)list);
 }
 
 static void assert_no_survivors _((List *, const char *, void *));
@@ -426,7 +426,7 @@ lock_mutex(mutex)
   rb_thread_critical = 1;
 
   while (RTEST(mutex->owner)) {
-    wait(&mutex->waiting);
+    wait_list(&mutex->waiting);
     rb_thread_critical = 1;
   }
   mutex->owner = current; 
@@ -630,7 +630,7 @@ wait_condvar(condvar, mutex)
     rb_raise(private_eThreadError, "Not owner");
   }
   mutex->owner = Qnil;
-  wait(&condvar->waiting);
+  wait_list(&condvar->waiting);
 
   lock_mutex(mutex);
 }
@@ -656,7 +656,7 @@ legacy_wait(unused, args)
   VALUE unused;
   legacy_wait_args *args;
 {
-  wait(&args->condvar->waiting);
+  wait_list(&args->condvar->waiting);
   rb_funcall(args->mutex, rb_intern("lock"), 0);
   return Qnil;
 }
