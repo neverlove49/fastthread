@@ -1105,9 +1105,21 @@ static VALUE setup_classes(unused)
 void
 Init_fastthread()
 {
+  VALUE global_variables;
+  VALUE fastthread_avoid_mem_pools;
   int saved_critical;
+  int i;
 
-  avoid_mem_pools = rb_gv_get("$fastthread_avoid_mem_pools");
+  avoid_mem_pools = Qnil;
+  fastthread_avoid_mem_pools = rb_str_new2("$fastthread_avoid_mem_pools");
+  global_variables = rb_f_global_variables();
+  for ( i = 0 ; i < RARRAY(global_variables)->len ; i++ ) {
+    if (RTEST(rb_equal(RARRAY(global_variables)->ptr[i], fastthread_avoid_mem_pools))) {
+      avoid_mem_pools = rb_gv_get("$fastthread_avoid_mem_pools");
+      break;
+    }
+  }
+  
   rb_global_variable(&avoid_mem_pools);
   rb_define_variable("$fastthread_avoid_mem_pools", &avoid_mem_pools);
 
