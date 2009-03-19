@@ -13,9 +13,7 @@ Echoe.new("fastthread") do |p|
 
   p.need_tar_gz = false
   p.need_tgz = true
-  p.certificate_chain = ['/Users/eweaver/p/configuration/gem_certificates/mongrel/mongrel-public_cert.pem',
-    '/Users/eweaver/p/configuration/gem_certificates/evan_weaver-mongrel-public_cert.pem']    
-  p.require_signed = true
+  p.require_signed = false
 
   p.eval = proc do
     if Platform.windows?
