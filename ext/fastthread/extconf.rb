@@ -2,7 +2,7 @@ version_components = RUBY_VERSION.split('.').map { |c| c.to_i }
 
 need_fastthread = ( !defined? RUBY_ENGINE )
 need_fastthread &= ( RUBY_PLATFORM != 'java' )
-need_fastthread &= ( version_components[0..1] == [1, 8] && ( version_components[2] < 6 || version_components[2] == 6 && RUBY_PATCHLEVEL.to_i < 111 ) )
+need_fastthread &= ( version_components[0..1] == [1, 8] && ( version_components[2] < 6 || version_components[2] == 6 && RUBY_PATCHLEVEL.to_i < 112 ) )
 
 if need_fastthread
   require 'mkmf'
