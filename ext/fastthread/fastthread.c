@@ -299,7 +299,11 @@ typedef struct _Mutex {
     List waiting;
 } Mutex;
 
+#if RUBY_VERSION_MAJOR >= 1 && RUBY_VERSION_MINOR >= 9
 #define MUTEX_LOCKED_P(mutex) (RTEST((mutex)->owner) && rb_thread_alive_p((mutex)->owner))
+#else
+#define MUTEX_LOCKED_P(mutex) (RTEST((mutex)->owner))
+#endif
 
 static void
 mark_mutex(Mutex *mutex)
