@@ -1,3 +1,5 @@
+  v1.0.5  Backwards compatibility tweak for 1.8.5
+
   v1.0.4  Fix for JRuby, and re-enable fastthread for 1.8.6p111
 
   v1.0.3. Make native build a noop on Rubies that have no real need for fastthread
