@@ -12,6 +12,7 @@
 #include <ruby.h>
 #include <intern.h>
 #include <rubysig.h>
+#include <version.h>
 
 static VALUE rb_cMutex;
 static VALUE rb_cConditionVariable;
@@ -299,7 +300,7 @@ typedef struct _Mutex {
     List waiting;
 } Mutex;
 
-#if RUBY_VERSION_MAJOR == 1 && RUBY_VERSION_MINOR == 8 && RUBY_VERSION_PATCHLEVEL < 6
+#if RUBY_VERSION_MAJOR == 1 && RUBY_VERSION_MINOR == 8 && RUBY_VERSION_TEENY < 6
 #define MUTEX_LOCKED_P(mutex) (RTEST((mutex)->owner))
 #else
 #define MUTEX_LOCKED_P(mutex) (RTEST((mutex)->owner) && rb_thread_alive_p((mutex)->owner))
