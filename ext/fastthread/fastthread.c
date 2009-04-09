@@ -300,11 +300,13 @@ typedef struct _Mutex {
     List waiting;
 } Mutex;
 
-#if RUBY_VERSION_MAJOR == 1 && RUBY_VERSION_MINOR == 8 && RUBY_VERSION_TEENY < 6
-#define MUTEX_LOCKED_P(mutex) (RTEST((mutex)->owner))
+#if RUBY_VERSION_MAJOR == 1 && RUBY_VERSION_MINOR == 8 && (RUBY_VERSION_TEENY < 6 || (RUBY_VERSION_TEENY == 6 && RUBY_VERSION_PATCHLEVEL < 31))
+#define thread_is_alive(t) ((int)1)
 #else
-#define MUTEX_LOCKED_P(mutex) (RTEST((mutex)->owner) && rb_thread_alive_p((mutex)->owner))
+#define thread_is_alive(t) RTEST(rb_thread_alive_p((t)))
 #endif
+
+#define MUTEX_LOCKED_P(mutex) (RTEST((mutex)->owner) && thread_is_alive((mutex)->owner)
 
 static void
 mark_mutex(Mutex *mutex)
