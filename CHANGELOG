@@ -1,3 +1,5 @@
+  v1.0.7  Enable for all 1.8.x versions; add fix for 1.8.6 patchlevels < 31
+
   v1.0.6  Try again for 1.8.5.
 
   v1.0.5  Backwards compatibility tweak for 1.8.5
