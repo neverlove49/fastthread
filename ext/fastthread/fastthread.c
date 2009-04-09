@@ -306,7 +306,7 @@ typedef struct _Mutex {
 #define thread_is_alive(t) RTEST(rb_thread_alive_p((t)))
 #endif
 
-#define MUTEX_LOCKED_P(mutex) (RTEST((mutex)->owner) && thread_is_alive((mutex)->owner)
+#define MUTEX_LOCKED_P(mutex) (RTEST((mutex)->owner) && thread_is_alive((mutex)->owner))
 
 static void
 mark_mutex(Mutex *mutex)
