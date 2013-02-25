@@ -10,7 +10,7 @@ if need_fastthread
 else
   require 'rbconfig'
   File.open('Makefile', 'w') do |stream|
-    Config::CONFIG.each do |key, value|
+    RbConfig::CONFIG.each do |key, value|
       stream.puts "#{key} = #{value}"
     end
     stream.puts
