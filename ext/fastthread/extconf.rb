@@ -11,7 +11,7 @@ else
   require 'rbconfig'
   File.open('Makefile', 'w') do |stream|
     RbConfig::CONFIG.each do |key, value|
-      stream.puts "#{key} = #{value}"
+      stream.puts "#{key} = #{value.to_s.strip}"
     end
     stream.puts
     stream << <<EOS
